@@ -30,10 +30,13 @@ class ResidualBlock(nn.Module):
         self.conditioner_projection = nn.Conv1d(encoder_hidden, 2 * residual_channels, 1)
         self.output_projection = nn.Conv1d(residual_channels, 2 * residual_channels, 1)
 
-    def forward(self, x, conditioner, diffusion_step):
+    def forward(self, x, conditioner, diffusion_step, anchor_diffusion_step=None):
         diffusion_step = self.diffusion_projection(diffusion_step).unsqueeze(-1)
         conditioner = self.conditioner_projection(conditioner)
         y = x + diffusion_step
+        if anchor_diffusion_step is not None:
+            anchor_diffusion_step = self.diffusion_projection(anchor_diffusion_step).unsqueeze(-1)
+            y = y + anchor_diffusion_step
 
         y = self.dilated_conv(y) + conditioner
 
@@ -72,7 +75,7 @@ class WaveNet(nn.Module):
         self.output_projection = Conv1d(num_channels, in_dims * n_feats, 1)
         nn.init.zeros_(self.output_projection.weight)
 
-    def forward(self, spec, diffusion_step, cond):
+    def forward(self, spec, diffusion_step, cond, anchor_diffusion_step=None):
         """
         :param spec: [B, F, M, T]
         :param diffusion_step: [B, 1]
@@ -88,9 +91,12 @@ class WaveNet(nn.Module):
         x = F.relu(x)
         diffusion_step = self.diffusion_embedding(diffusion_step)
         diffusion_step = self.mlp(diffusion_step)
+        if anchor_diffusion_step is not None:
+            anchor_diffusion_step = self.diffusion_embedding(anchor_diffusion_step)
+            anchor_diffusion_step = self.mlp(anchor_diffusion_step)
         skip = []
         for layer in self.residual_layers:
-            x, skip_connection = layer(x, cond, diffusion_step)
+            x, skip_connection = layer(x, cond, diffusion_step, anchor_diffusion_step=anchor_diffusion_step)
             skip.append(skip_connection)
 
         x = torch.sum(torch.stack(skip), dim=0) / sqrt(len(self.residual_layers))

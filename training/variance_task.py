@@ -8,7 +8,7 @@ import utils
 import utils.infer_utils
 from basics.base_dataset import BaseDataset
 from basics.base_task import BaseTask
-from modules.losses import DurationLoss, DiffusionLoss, RectifiedFlowLoss
+from modules.losses import DurationLoss, DiffusionLoss, RectifiedFlowLoss, MeanFlowLoss
 from modules.metrics import (
     RawCurveAccuracy, RawCurveR2Score, RhythmCorrectness, PhonemeDurationAccuracy
 )
@@ -141,6 +141,11 @@ class VarianceTask(BaseTask):
                 self.pitch_loss = RectifiedFlowLoss(
                     loss_type=hparams['main_loss_type'], log_norm=hparams['main_loss_log_norm']
                 )
+            elif self.diffusion_type == 'meanflow':
+                # TODO: add meanflow hparams
+                self.pitch_loss = MeanFlowLoss(
+                    loss_type=hparams['main_loss_type'], log_norm=hparams['main_loss_log_norm']
+                )
             else:
                 raise ValueError(f'Unknown diffusion type: {self.diffusion_type}')
             self.register_validation_loss('pitch_loss')
@@ -153,6 +158,11 @@ class VarianceTask(BaseTask):
                 self.var_loss = RectifiedFlowLoss(
                     loss_type=hparams['main_loss_type'], log_norm=hparams['main_loss_log_norm']
                 )
+            elif self.diffusion_type == 'meanflow':
+                # TODO: add meanflow hparams
+                self.pitch_loss = MeanFlowLoss(
+                    loss_type=hparams['main_loss_type'], log_norm=hparams['main_loss_log_norm']
+                )   
             else:
                 raise ValueError(f'Unknown diffusion type: {self.diffusion_type}')
             self.register_validation_loss('var_loss')
@@ -228,6 +238,11 @@ class VarianceTask(BaseTask):
                     pitch_loss = self.pitch_loss(
                         pitch_v_pred, pitch_v_gt, t=t, non_padding=non_padding
                     )
+                elif self.diffusion_type == 'meanflow':
+                    pitch_u_pred, pitch_u_tgt, t, r = pitch_pred
+                    pitch_loss = self.pitch_loss(
+                        pitch_u_pred, pitch_u_tgt, t=t, non_padding=non_padding
+                    )
                 else:
                     raise ValueError(f"Unknown diffusion type: {self.diffusion_type}")
                 losses['pitch_loss'] = self.lambda_pitch_loss * pitch_loss
@@ -242,6 +257,11 @@ class VarianceTask(BaseTask):
                     var_loss = self.var_loss(
                         var_v_pred, var_v_gt, t=t, non_padding=non_padding
                     )
+                elif self.diffusion_type == 'meanflow':
+                    pitch_u_pred, pitch_u_tgt, t, r = pitch_pred
+                    var_loss = self.var_loss(
+                        pitch_u_pred, pitch_u_tgt, t=t, non_padding=non_padding
+                    )                
                 else:
                     raise ValueError(f"Unknown diffusion type: {self.diffusion_type}")
                 losses['var_loss'] = self.lambda_var_loss * var_loss

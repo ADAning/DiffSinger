@@ -73,7 +73,7 @@ class LYNXNetResidualLayer(nn.Module):
         self.convmodule = LYNXConvModule(dim=dim, expansion_factor=expansion_factor, kernel_size=kernel_size,
                                          activation=activation, dropout=dropout)
 
-    def forward(self, x, conditioner, diffusion_step, front_cond_inject=False):
+    def forward(self, x, conditioner, diffusion_step, anchor_diffusion_step=None, front_cond_inject=False):
         if front_cond_inject:
             x = x + self.conditioner_projection(conditioner)
             res_x = x
@@ -81,6 +81,8 @@ class LYNXNetResidualLayer(nn.Module):
             res_x = x
             x = x + self.conditioner_projection(conditioner)
         x = x + self.diffusion_projection(diffusion_step)
+        if anchor_diffusion_step is not None:
+            x = x + self.diffusion_projection(anchor_diffusion_step)
         x = x.transpose(1, 2)
         x = self.convmodule(x)  # (#batch, dim, length) 
         x = x.transpose(1, 2) + res_x
@@ -125,7 +127,7 @@ class LYNXNet(nn.Module):
         self.strong_cond = strong_cond
         nn.init.zeros_(self.output_projection.weight)
 
-    def forward(self, spec, diffusion_step, cond):
+    def forward(self, spec, diffusion_step, cond, anchor_diffusion_step=None):
         """
         :param spec: [B, F, M, T]
         :param diffusion_step: [B, 1]
@@ -143,9 +145,11 @@ class LYNXNet(nn.Module):
             x = F.gelu(x)
 
         diffusion_step = self.diffusion_embedding(diffusion_step).unsqueeze(-1)
+        if anchor_diffusion_step is not None:
+            anchor_diffusion_step = self.diffusion_embedding(anchor_diffusion_step).unsqueeze(-1)
 
         for layer in self.residual_layers:
-            x = layer(x, cond, diffusion_step, front_cond_inject=self.strong_cond)
+            x = layer(x, cond, diffusion_step, anchor_diffusion_step=anchor_diffusion_step, front_cond_inject=self.strong_cond)
 
         # post-norm
         x = self.norm(x.transpose(1, 2)).transpose(1, 2)

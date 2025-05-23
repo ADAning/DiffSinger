@@ -10,7 +10,7 @@ from basics.base_dataset import BaseDataset
 from basics.base_task import BaseTask
 from basics.base_vocoder import BaseVocoder
 from modules.aux_decoder import build_aux_loss
-from modules.losses import DiffusionLoss, RectifiedFlowLoss
+from modules.losses import DiffusionLoss, RectifiedFlowLoss, MeanFlowLoss
 from modules.toplevel import DiffSingerAcoustic, ShallowDiffusionOutput
 from modules.vocoders.registry import get_vocoder_cls
 from utils.hparams import hparams
@@ -72,7 +72,7 @@ class AcousticTask(BaseTask):
         super().__init__()
         self.dataset_cls = AcousticDataset
         self.diffusion_type = hparams['diffusion_type']
-        assert self.diffusion_type in ['ddpm', 'reflow'], f"Unknown diffusion type: {self.diffusion_type}"
+        assert self.diffusion_type in ['ddpm', 'reflow', 'meanflow'], f"Unknown diffusion type: {self.diffusion_type}"
         self.use_shallow_diffusion = hparams['use_shallow_diffusion']
         if self.use_shallow_diffusion:
             self.shallow_args = hparams['shallow_diffusion_args']
@@ -111,6 +111,12 @@ class AcousticTask(BaseTask):
         elif self.diffusion_type == 'reflow':
             self.mel_loss = RectifiedFlowLoss(
                 loss_type=hparams['main_loss_type'], log_norm=hparams['main_loss_log_norm']
+            )
+        elif self.diffusion_type == 'meanflow':
+            # TODO: add meanflow hparams
+            self.mel_loss = MeanFlowLoss(
+                loss_type=hparams['main_loss_type'], log_norm=hparams['main_loss_log_norm'],
+                
             )
         else:
             raise ValueError(f"Unknown diffusion type: {self.diffusion_type}")
@@ -162,6 +168,9 @@ class AcousticTask(BaseTask):
                 elif self.diffusion_type == 'reflow':
                     v_pred, v_gt, t = output.diff_out
                     mel_loss = self.mel_loss(v_pred, v_gt, t=t, non_padding=non_padding)
+                elif self.diffusion_type == 'meanflow':
+                    u_pred, u_tgt, t, r = output.diff_out
+                    mel_loss = self.mel_loss(u_pred, u_tgt, t=t, non_padding=non_padding)
                 else:
                     raise ValueError(f"Unknown diffusion type: {self.diffusion_type}")
                 losses['mel_loss'] = mel_loss
